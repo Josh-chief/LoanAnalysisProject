@@ -108,6 +108,11 @@ if (n_duplicates > 0){
 Here we examined the **distribution of each numeric variable using histograms and boxplots** to **identify skewness, outliers and the general shape of each distribution.**
 
 ```{r univariate-numeric, fig.height=20, fig.width=16}
+# Define numeric variables
+numeric_vars <- c("person_age", "person_income", "person_emp_exp", "loan_amnt", 
+                  "loan_int_rate", "loan_percent_income", 
+                  "cb_person_cred_hist_length", "credit_score")
+
 # Histograms with count annotations
 hist_plots <- lapply(numeric_vars, function(var) {
   ggplot(df, aes(x = .data[[var]])) +
@@ -399,9 +404,7 @@ df$income_bracket       <- cut(df$person_income,
                                breaks = quantile(df$person_income, probs = c(0, 0.25, 0.5, 0.75, 1)),
                                labels = c("Low", "Lower-Mid", "Upper-Mid", "High"),
                                include.lowest = TRUE)
-```
 
-```{r engineered-features-viz, fig.height=8, fig.width=12}
 p1 <- ggplot(df, aes(x = loan_status, y = loan_credit_ratio, fill = loan_status)) +
   geom_boxplot(alpha = 0.7) +
   scale_fill_manual(values = c("#e74c3c", "#27ae60")) +
@@ -613,7 +616,7 @@ autoplot(lm_step, which = 1:6, ncol = 3) + theme_classic()
 
 If assumptions are violated, we try alternative transformations.
 
-```{r alternative-transformations}
+```{r alternative-transformations-compare}
 # Square root transformation
 lm_sqrt <- lm(sqrt(person_income) ~ person_age + person_gender + person_education + 
                 person_emp_exp + person_home_ownership,
@@ -621,38 +624,41 @@ lm_sqrt <- lm(sqrt(person_income) ~ person_age + person_gender + person_educatio
 
 cat("Log Transform Adj R²:", summary(lm_step)$adj.r.squared, "\n")
 cat("Sqrt Transform Adj R²:", summary(lm_sqrt)$adj.r.squared, "\n")
+
+
 ```
 
-```{r alternative-transformations, fig.height=16, fig.width=14}
-# Square root transformation
-lm_sqrt <- lm(sqrt(person_income) ~ person_age + person_gender + person_education + 
-                person_emp_exp + person_home_ownership,
-              data = train_reg)
+```{r log-diagnostics, fig.height=10, fig.width=10}
+par(mar = c(5, 5, 4, 2), mfrow = c(2, 2))
 
-cat("--- Log Transform Adj R²:", summary(lm_step)$adj.r.squared, "---\n")
-cat("--- Sqrt Transform Adj R²:", summary(lm_sqrt)$adj.r.squared, "---\n")
-
-# Diagnostic plots side by side
-par(mfrow = c(4, 2))
-
-# Row 1: Residuals vs Fitted
-plot(lm_step, which = 1, main = "Log Transform: Residuals vs Fitted")
-plot(lm_sqrt, which = 1, main = "Sqrt Transform: Residuals vs Fitted")
-
-# Row 2: Q-Q Plot (Normality)
-plot(lm_step, which = 2, main = "Log Transform: Q-Q Plot")
-plot(lm_sqrt, which = 2, main = "Sqrt Transform: Q-Q Plot")
-
-# Row 3: Scale-Location (Homoscedasticity)
-plot(lm_step, which = 3, main = "Log Transform: Scale-Location")
-plot(lm_sqrt, which = 3, main = "Sqrt Transform: Scale-Location")
-
-# Row 4: Cook's Distance (Influence)
-plot(lm_step, which = 4, main = "Log Transform: Cook's Distance")
-plot(lm_sqrt, which = 4, main = "Sqrt Transform: Cook's Distance")
+plot(lm_step, which = 1, main = "Log: Residuals vs Fitted", 
+     sub.caption = "", caption = "")
+plot(lm_step, which = 2, main = "Log: Q-Q Plot", 
+     sub.caption = "", caption = "")
+plot(lm_step, which = 3, main = "Log: Scale-Location", 
+     sub.caption = "", caption = "")
+plot(lm_step, which = 4, main = "Log: Cook's Distance", 
+     sub.caption = "", caption = "")
 
 par(mfrow = c(1, 1))
+```
 
+```{r sqrt-diagnostics, fig.height=10, fig.width=10}
+par(mar = c(5, 5, 4, 2), mfrow = c(2, 2))
+
+plot(lm_sqrt, which = 1, ann = FALSE, sub.caption = "")
+title(main = "Sqrt: Residuals vs Fitted", xlab = "Fitted values", ylab = "Residuals")
+
+plot(lm_sqrt, which = 2, ann = FALSE, sub.caption = "")
+title(main = "Sqrt: Q-Q Plot", xlab = "Theoretical Quantiles", ylab = "Standardized residuals")
+
+plot(lm_sqrt, which = 3, ann = FALSE, sub.caption = "")
+title(main = "Sqrt: Scale-Location", xlab = "Fitted values", ylab = "|Standardized residuals|")
+
+plot(lm_sqrt, which = 4, ann = FALSE, sub.caption = "")
+title(main = "Sqrt: Cook's Distance", xlab = "Obs. number", ylab = "Cook's distance")
+
+par(mfrow = c(1, 1))
 ```
 
 ```{r transformation-histograms, fig.height=6, fig.width=14}
@@ -678,21 +684,13 @@ par(mfrow = c(1, 1))
 
 -   **Row 1 (Residuals vs Fitted):** checks linearity,which transformation produces a flatter, more random scatter?
 
-<!-- -->
-
 -   **Row 2 (Q-Q Plot):** checks normality,which one follows the diagonal line more closely
-
-<!-- -->
 
 -   **Row 3 (Scale-Location):** checks homoscedasticity,which one has a more horizontal red line
 
-<!-- -->
-
 -   **Row 4 (Cook's Distance):** checks influence — which one has fewer extreme outliers?
 
-<!-- -->
-
--   **Histogram chunk:** directly compares the residual distributions with skewness values and a normal curve overlay
+**Histogram chunk:** directly compares the residual distributions with skewness values and a normal curve overlay
 
 ## Model 2: Decision Tree Regressor
 
@@ -937,8 +935,6 @@ print(cm_dt)
 -   **AUC = 0.9–1.0** excellent model
 
 -   **AUC = 0.8–0.9** good model
-
--   
 
     ### Credit Risk Analysis
 
