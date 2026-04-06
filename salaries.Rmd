@@ -1,9 +1,844 @@
 ---
-title: "R Notebook"
-output: html_notebook
+title: "Salary Dataset Analysis (2020–2025)"
+subtitle: "End-to-End Machine Learning Pipeline: Regression, Classification & Insights"
+author: "Data Science Report"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    number_sections: true
+    theme: flatly
+    highlight: tango
+    code_folding: show
+    fig_width: 10
+    fig_height: 6
 ---
 
-```{r}
+```{r setup, include=FALSE}
+# Set global chunk options for reproducibility and clean output
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.align = "center"
+)
+
+# Set seed for reproducibility
+set.seed(42)
+```
+
+# Introduction
+
+This report presents a machine learning pipeline for analyzing and modeling salary trends from 2020-2025.Salaries are reported in USD(converted at average FX rates). The analysis covers data preprocessing,exploratory analysis, feature enginering, regression and classification modeling, statistical relationship analysis and some business relevant interpretation.
+
+# Data Understanding and Preprocessing
+
+## Load Libraries
+
+```{r load libraries}
+
+libs <- c("tidyverse", "dplyr", "gridExtra", "ggplot2", "ggfortify","broom", "ggcorrplot", "corrr", "corrplot", 
+          "MASS", 'datarium', 'randomForest', 'rpart', 'Hmisc', "caret", "Metrics","car","rpart.plot","e1071","pROC","kableExtra","scales")
+
+for(lib in libs){
+  if(!(lib %in% installed.packages())){
+    install.packages(lib)
+  }
+  library(lib, character.only = TRUE)
+}
+
+
+theme_set(theme_classic())
+
 
 ```
 
+```{r}
+
+select  <- dplyr::select
+mutate  <- dplyr::mutate
+filter  <- dplyr::filter
+summarise <- dplyr::summarise
+```
+
+## Load and Inspect the Dataset
+
+```{r}
+df <-read_csv ("C:/Users/Light House/Desktop/MastersDSA/semThree-DSA/Linear Models/Data_Project/salaries.csv")
+```
+
+```{r}
+#Display structure
+str(df)
+
+```
+
+```{r}
+#Dimensions
+
+cat("Dataset dimensions:", nrow(df), "rows x", ncol(df), "columns\n")
+
+```
+
+```{r}
+#First few rows
+head(df)
+
+
+```
+
+## Missing Values Check
+
+```{r}
+# checking for missing values in each column
+
+missing_summary <- data.frame(
+  Column = names(df),
+  Missing_Count = sapply(df, function(x) sum(is.na(x))),
+  Missing_Pct = sapply(df, function(x) round(mean(is.na(x)) * 100, 2))
+)
+row.names(missing_summary)<- NULL 
+
+cat("Total missing values:", sum(is.na(df)), "\n")
+
+```
+
+## Convert Categorical Variables to Factors
+
+This step converts text-based columns ( `experience_level`, `company_size`, `job_title`) from plain character strings into R **factors**, which are R's way of representing categorical data. This is necessary because R's modeling and plotting functions require factors to properly create dummy variables, group data and interpret categories correctly.
+
+```{r convert factors}
+## Convert Categorical Variables to Factors
+
+categorical_cols <- c(
+  "experience_level","employment_type","job_title","salary_currency","employee_residence","company_location","company_size"
+)
+df <- df %>%
+  mutate(across(all_of(categorical_cols), as.factor))
+
+# Convert (work_yea)r to factor for grouping keeping numeric copy for modeling
+
+df$work_year_factor <- as.factor(df$work_year)
+
+# Convert remote_ratio to factor for categorical analysis
+df$remote_ratio_factor <- factor(df$remote_ratio,
+  levels = c(0, 50, 100),
+  labels = c("On-site", "Hybrid", "Remote")
+)
+
+# Verify conversions
+str(df %>% select(all_of(categorical_cols), work_year_factor, remote_ratio_factor))
+
+```
+
+## Sanity Checks:
+
+The sanity check ensures that salary conversions to USD are reasonable. Any large discrepancies between `salary` and `salary_in_usd` for USD-denominated rows would indicate data quality issues.
+
+### Salary vs Salary in USD
+
+```{r}
+# Checkin if (salary) and (salary_in_usd) are consistent for USD denominated salaries
+usd_salaries <- df %>%
+  filter(salary_currency == "USD")
+
+if (nrow(usd_salaries) > 0) {
+  usd_salaries <- usd_salaries %>%
+    mutate(
+      diff = abs(salary - salary_in_usd),
+      pct_diff = ifelse(salary > 0, (diff / salary) * 100, NA)
+    )
+
+  cat("For USD-denominated salaries:\n")
+  
+  cat("Mean absolute difference:", round(mean(usd_salaries$diff, na.rm = TRUE), 2), "\n")
+  cat("Max absolute difference:", round(max(usd_salaries$diff, na.rm = TRUE), 2), "\n")
+  cat(
+    "Records with >1% difference:",
+    sum(usd_salaries$pct_diff > 1, na.rm = TRUE), "\n"
+  )
+}
+
+```
+
+```{r}
+# Check for implausible salary values
+cat("\nSalary in USD summary:\n")
+summary(df$salary_in_usd)
+
+```
+
+```{r}
+# Flag potential outliers extremely low or high.
+
+cat("\nRecords with salary_in_usd < $10,000:", sum(df$salary_in_usd < 10000), "\n")
+cat("Records with salary_in_usd > $500,000:", sum(df$salary_in_usd > 500000), "\n")
+```
+
+# Exploratory Data Analysis (EDA)
+
+## Descriptive Statistics
+
+```{r}
+# Summary statistics for numeric variables
+numeric_vars <- df %>%
+  select(work_year, salary, salary_in_usd, remote_ratio)
+
+summary(numeric_vars) %>%
+  kable(caption = "Descriptive Statistics – Numeric Variables") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+```{r}
+# Frequency tables for key categorical variables
+
+cat("Experience Level Distribution \n")
+
+table(df$experience_level) %>%
+  sort(decreasing = TRUE) %>%
+  print()
+
+cat("\n Employment Type Distribution \n")
+table(df$employment_type) %>%
+  sort(decreasing = TRUE) %>%
+  print()
+
+cat("\n Company Size Distribution \n")
+table(df$company_size) %>%
+  sort(decreasing = TRUE) %>%
+  print()
+
+cat("\n Remote Ratio Distribution\n")
+table(df$remote_ratio_factor) %>%
+  sort(decreasing = TRUE) %>%
+  print()
+```
+
+```{r}
+# Top 10 most common job titles
+
+cat("\n Top 10 Job Titles \n")
+
+df %>%
+  count(job_title, sort = TRUE) %>%
+  head(10) %>%
+  print()
+```
+
+## Salary Distribution
+
+Salary distributions are typically right-skewed with a long tail of high earners.
+
+```{r}
+# NEW CODE
+# Before transformation – Histogram
+p1 <- ggplot(df, aes(x = salary_in_usd)) +
+  geom_histogram(bins = 50, fill = "#3498db", color = "white", alpha = 0.8) +
+  scale_x_continuous(labels = dollar_format()) +
+  labs(title = "Before: Salary (USD)", x = "Salary in USD", y = "Count") +
+  theme_minimal()
+
+# After transformation – Histogram
+p2 <- ggplot(df %>% filter(salary_in_usd > 0), aes(x = log(salary_in_usd))) +
+  geom_histogram(bins = 50, fill = "#2ecc71", color = "white", alpha = 0.8) +
+  labs(title = "After: Log(Salary)", x = "Log(Salary in USD)", y = "Count") +
+  theme_minimal()
+
+# Before transformation – Boxplot
+p3 <- ggplot(df, aes(y = salary_in_usd)) +
+  geom_boxplot(fill = "#3498db", alpha = 0.6, outlier.color = "red") +
+  scale_y_continuous(labels = dollar_format()) +
+  labs(title = "Before: Boxplot", y = "Salary in USD") +
+  theme_minimal()
+
+# After transformation – Boxplot
+p4 <- ggplot(df %>% filter(salary_in_usd > 0), aes(y = log(salary_in_usd))) +
+  geom_boxplot(fill = "#2ecc71", alpha = 0.6, outlier.color = "red") +
+  labs(title = "After: Boxplot", y = "Log(Salary in USD)") +
+  theme_minimal()
+
+# Arrange in 2x2 grid
+grid.arrange(p1, p2, p3, p4, ncol = 2, nrow = 2,
+             top = "Salary Distribution: Before vs After Log Transformation")
+
+# Print skewness comparison
+cat("Skewness BEFORE transformation:", round(skewness(df$salary_in_usd), 3), "\n")
+cat("Skewness AFTER transformation:",
+    round(skewness(log(df$salary_in_usd[df$salary_in_usd > 0])), 3), "\n")
+
+```
+
+The top row shows histograms before vs after and the bottom row shows boxplots before vs after. The green plots on the right should look much more symmetric and bell-shaped than the blue ones on the left, with the skewness values confirming the improvement numerically.
+
+## Salary vs Experience Level
+
+```{r}
+
+ggplot(df, aes(x = experience_level, y = salary_in_usd, fill = experience_level)) +
+  geom_boxplot(alpha = 0.7, outlier.alpha = 0.3) +
+  scale_y_continuous(labels = dollar_format()) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    title = "Salary Distribution by Experience Level",
+    x = "Experience Level", y = "Salary in USD"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+# Summary table
+df %>%
+  group_by(experience_level) %>%
+  summarise(
+    Count = n(),
+    Mean_Salary = round(mean(salary_in_usd), 0),
+    Median_Salary = round(median(salary_in_usd), 0),
+    SD_Salary = round(sd(salary_in_usd), 0)
+  ) %>%
+  arrange(desc(Mean_Salary)) %>%
+  kable(
+    caption = "Salary Summary by Experience Level",
+    format.args = list(big.mark = ",")
+  ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+
+```
+
+Salary increases consistently with experience level, with Executive (EX) roles earning the highest and Entry-level (EN) the lowest. The salary spread also widens at senior levels that indicating more variability in compensation for experienced professionals. This confirms that experience level is a strong predictor of salary.
+
+## Salary vs Company Size
+
+```{r}
+ggplot(df, aes(x = company_size, y = salary_in_usd, fill = company_size)) +
+  geom_boxplot(alpha = 0.7, outlier.alpha = 0.3) +
+  scale_y_continuous(labels = dollar_format()) +
+  scale_fill_brewer(palette = "Pastel1") +
+  labs(
+    title = "Salary Distribution by Company Size",
+    x = "Company Size (S/M/L)", y = "Salary in USD"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+df %>%
+  group_by(company_size) %>%
+  summarise(
+    Count = n(),
+    Mean_Salary = round(mean(salary_in_usd), 0),
+    Median_Salary = round(median(salary_in_usd), 0)
+  ) %>%
+  kable(
+    caption = "Salary by Company Size",
+    format.args = list(big.mark = ",")
+  ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+Medium (M) and Large (L) companies tend to offer higher salaries compared to Small (S) companies with medium sized firms often showing the widest salary range. Small companies cluster at lower pay levels with less variation likely due to tighter budgets and fewer senior roles. Overall, company size has a noticeable but moderate effect on compensation.
+
+## Salary vs Remote Ratio
+
+```{r}
+ggplot(df, aes(
+  x = remote_ratio_factor, y = salary_in_usd,
+  fill = remote_ratio_factor
+)) +
+  geom_boxplot(alpha = 0.7, outlier.alpha = 0.3) +
+  scale_y_continuous(labels = dollar_format()) +
+  scale_fill_brewer(palette = "Set3") +
+  labs(
+    title = "Salary Distribution by Remote Work Arrangement",
+    x = "Remote Ratio", y = "Salary in USD"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+df %>%
+  group_by(remote_ratio_factor) %>%
+  summarise(
+    Count = n(),
+    Mean_Salary = round(mean(salary_in_usd), 0),
+    Median_Salary = round(median(salary_in_usd), 0)
+  ) %>%
+  kable(
+    caption = "Salary by Remote Work Arrangement",
+    format.args = list(big.mark = ",")
+  ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+Fully remote roles tend to offer slightly higher median salaries compared to on-site and hybrid positions, suggesting that remote jobs are often tied to higher paying markets or specialized technical roles. On-site and hybrid arrangements show similar salary ranges, indicating that partial remote work alone doesn't significantly boost compensation. The differences across categories are modest, meaning remote ratio is a weaker salary driver compared to experience level or company size.
+
+## Salary Trends Across Years (2020–2025)
+
+```{r}
+yearly_stats <- df %>%
+  group_by(work_year) %>%
+  summarise(
+    Count = n(),
+    Mean_Salary = mean(salary_in_usd),
+    Median_Salary = median(salary_in_usd),
+    SD_Salary = sd(salary_in_usd)
+  )
+
+ggplot(yearly_stats, aes(x = work_year)) +
+  geom_line(aes(y = Mean_Salary, color = "Mean"), linewidth = 1.2) +
+  geom_point(aes(y = Mean_Salary, color = "Mean"), size = 3) +
+  geom_line(aes(y = Median_Salary, color = "Median"),
+    linewidth = 1.2,
+    linetype = "dashed"
+  ) +
+  geom_point(aes(y = Median_Salary, color = "Median"), size = 3) +
+  scale_y_continuous(labels = dollar_format()) +
+  scale_color_manual(values = c("Mean" = "#e74c3c", "Median" = "#2ecc71")) +
+  labs(
+    title = "Salary Trends Over Time (2020–2025)",
+    x = "Year", y = "Salary in USD", color = "Statistic"
+  ) +
+  theme_minimal()
+
+yearly_stats %>%
+  mutate(across(
+    where(is.numeric) & !matches("work_year|Count"),
+    ~ round(., 0)
+  )) %>%
+  kable(
+    caption = "Yearly Salary Statistics",
+    format.args = list(big.mark = ",")
+  ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+The trend plot shows that both mean and median salaries have generally increased from 2020 to 2025, reflecting overall growth in compensation over this period. The gap between the mean (red) and median (green dashed) lines indicates right skewed salary distributions a few very high earners pull the mean above the median each year. The growing count of records over time also suggests the dataset captures an expanding job market.
+
+## Outlier Analysis
+
+```{r}
+Q1 <- quantile(df$salary_in_usd, 0.25)
+Q3 <- quantile(df$salary_in_usd, 0.75)
+IQR_val <- Q3 - Q1
+lower_bound <- Q1 - 1.5 * IQR_val
+upper_bound <- Q3 + 1.5 * IQR_val
+
+outliers <- df %>%
+  filter(salary_in_usd < lower_bound | salary_in_usd > upper_bound)
+
+cat("IQR:", scales::dollar(IQR_val), "\n")
+cat("Lower bound:", scales::dollar(lower_bound), "\n")
+cat("Upper bound:", scales::dollar(upper_bound), "\n")
+cat(
+  "Number of outliers:", nrow(outliers),
+  "(", round(nrow(outliers) / nrow(df) * 100, 1), "% of data)\n"
+)
+
+# Distribution of outliers by experience level
+if (nrow(outliers) > 0) {
+  cat("\nOutliers by Experience Level:\n")
+  table(outliers$experience_level) %>% print()
+}
+```
+
+```{r outlier-plot, fig.height=5}
+# NEW CODE
+# Create a temporary dataframe with outlier flag
+df_outlier <- df %>%
+  mutate(outlier_flag = ifelse(
+    salary_in_usd < lower_bound | salary_in_usd > upper_bound,
+    "Outlier", "Normal"
+  ))
+
+# Plot 1: Scatter plot highlighting outliers
+p1 <- ggplot(df_outlier, aes(x = seq_along(salary_in_usd), y = salary_in_usd,
+                              color = outlier_flag)) +
+  geom_point(alpha = 0.5, size = 1) +
+  geom_hline(yintercept = upper_bound, linetype = "dashed", color = "red") +
+  geom_hline(yintercept = lower_bound, linetype = "dashed", color = "red") +
+  scale_y_continuous(labels = dollar_format()) +
+  scale_color_manual(values = c("Normal" = "#3498db", "Outlier" = "#e74c3c")) +
+  labs(title = "Salary Outliers (IQR Method)",
+       x = "Observation Index", y = "Salary in USD", color = "") +
+  theme_minimal()
+
+# Plot 2: Outlier distribution by experience level
+outlier_data <- df_outlier %>% filter(outlier_flag == "Outlier")
+
+p2 <- ggplot(outlier_data, aes(x = experience_level, fill = experience_level)) +
+  geom_bar(alpha = 0.8) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(title = "Outliers by Experience Level",
+       x = "Experience Level", y = "Count") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+grid.arrange(p1, p2, ncol = 2)
+```
+
+Outliers in this salary data represent executivelevel compensation or niche roles, because of this rather than removing them we note their presence and consider robust modeling techniques. They are retained unless they introduce clear data errors.
+
+# Feature Engineering
+
+```{r}
+# Create a working copy for modeling
+df_model <- df
+
+# Feature 1: Salary Bands (for classification) 
+# Justification: Converting continuous salary into ordered categories enables
+# classification modeling and makes predictions more interpretable for HR teams.
+
+salary_quartiles <- quantile(df_model$salary_in_usd, probs = c(0.25, 0.50, 0.75))
+
+df_model <- df_model %>%
+  mutate(salary_band = case_when(
+    salary_in_usd <= salary_quartiles[1] ~ "Low",
+    salary_in_usd <= salary_quartiles[2] ~ "Medium",
+    salary_in_usd <= salary_quartiles[3] ~ "High",
+    TRUE ~ "Very High"
+  ))
+
+df_model$salary_band <- factor(df_model$salary_band,
+  levels = c("Low", "Medium", "High", "Very High"),
+  ordered = TRUE
+)
+
+cat("Salary Band Distribution:\n")
+table(df_model$salary_band) %>% print()
+cat("Quartile cutoffs:", scales::dollar(salary_quartiles), "\n")
+
+
+```
+
+```{r}
+# Feature 2: Experience Hierarchy (ordinal encoding) 
+# Justification: Experience level has a natural order (EN < MI < SE < EX),
+# and ordinal encoding preserves this hierarchy for models.
+
+df_model <- df_model %>%
+  mutate(experience_ord = case_when(
+    experience_level == "EN" ~ 1,
+    experience_level == "MI" ~ 2,
+    experience_level == "SE" ~ 3,
+    experience_level == "EX" ~ 4
+  ))
+
+cat("\nExperience ordinal mapping: EN=1, MI=2, SE=3, EX=4\n")
+```
+
+```{r}
+# Feature 3: Remote Work Category 
+# Justification: The remote_ratio (0/50/100) is already transformed to a factor
+# above. Here we also create a binary is_remote flag for simpler modeling.
+
+df_model <- df_model %>%
+  mutate(is_remote = ifelse(remote_ratio == 100, 1, 0))
+
+cat("Is Remote distribution:\n")
+table(df_model$is_remote) %>% print()
+```
+
+```{r}
+# Feature 4:Experience × Company Size 
+# Justification: Salary may depend on the combination of seniority and company
+# scale (e.g senior roles at large companies may pay disproportionately more).
+
+
+df_model <- df_model %>%
+  mutate(
+    company_size_num = case_when(
+      company_size == "S" ~ 1,
+      company_size == "M" ~ 2,
+      company_size == "L" ~ 3
+    ),
+    exp_x_compsize = experience_ord * company_size_num
+  )
+```
+
+```{r}
+# Feature 5: Regional Grouping 
+# Justification-With many unique country codes, grouping into regions reduces
+# dimensionality while preserving geographic salary patterns.
+
+df_model <- df_model %>%
+  mutate(company_region = case_when(
+    company_location == "US" ~ "US",
+    company_location == "GB" ~ "UK",
+    company_location %in% c(
+      "DE", "FR", "ES", "NL", "PT", "IT",
+      "AT", "BE", "CH", "SE", "DK", "FI",
+      "NO", "IE", "PL", "CZ", "RO", "GR",
+      "HU", "LU"
+    ) ~ "Europe",
+    company_location %in% c("CA", "BR", "MX", "AR", "CO", "CL") ~ "Americas",
+    company_location %in% c(
+      "IN", "PK", "SG", "JP", "CN", "KR",
+      "AU", "NZ", "IL", "AE", "TR"
+    ) ~ "Asia-Pacific",
+    TRUE ~ "Other"
+  ))
+
+df_model$company_region <- as.factor(df_model$company_region)
+
+cat("\nCompany Region Distribution:\n")
+table(df_model$company_region) %>%
+  sort(decreasing = TRUE) %>%
+  print()
+```
+
+```{r}
+# ---------- Feature 6: Same Country Flag ----------
+# Justification: Whether employee and company are in the same country may
+# affect compensation (cross-border roles may pay differently).
+df_model <- df_model %>%
+  mutate(same_country = ifelse(
+    as.character(employee_residence) == as.character(company_location), 1, 0
+  ))
+
+cat("\nSame Country (employee = company location):\n")
+table(df_model$same_country) %>% print()
+
+```
+
+This code creates a binary flag (1 or 0) that checks whether the employee lives in the same country as their company. If `employee_residence` matches `company_location`, it assigns 1 (same country), otherwise 0 (cross-border).Basically this feature is that cross-border employees (where `same_country = 0`) may receive different compensation.
+
+```{r}
+# Feature 7: Log Salary
+# Justification: Salary is right-skewed; log transformation helps meet
+# linear regression assumptions and stabilizes variance.
+
+
+df_model <- df_model %>%
+  mutate(log_salary = log(salary_in_usd))
+
+cat("\nFeature engineering complete. New columns added:\n")
+cat("salary_band, experience_ord, is_remote, company_size_num,\n")
+cat("exp_x_compsize, company_region, same_country, log_salary\n")
+
+
+```
+
+This code applies the natural logarithm (`log()`) to `salary_in_usd` and stores it as a new column called `log_salary`. This is done because salary data is typically right-skewed because most people earn moderate salaries while a few earn extremely high amounts, pulling the distribution's tail to the right. Log transformation compresses those extreme values and makes the distribution more symmetric and bell-shaped, which helps linear regression meet its assumptions of normally distributed residuals and constant variance.
+
+# Regression Modeling (Predict Salary)
+
+## Prepare Data for Modeling
+
+```{r}
+# Select features for regression
+reg_features <- c(
+  "experience_ord", "company_size_num", "is_remote",
+  "work_year", "exp_x_compsize", "same_country",
+  "company_region"
+)
+
+# Create model dataframe:remove rows with NA if any
+df_reg <- df_model %>%
+  select(all_of(reg_features), salary_in_usd, log_salary) %>%
+  drop_na()
+
+cat("Regression dataset:", nrow(df_reg), "rows\n")
+
+# Train-test split (80/20)
+set.seed(42)
+train_index <- createDataPartition(df_reg$salary_in_usd, p = 0.8, list = FALSE)
+train_data <- df_reg[train_index, ]
+test_data <- df_reg[-train_index, ]
+
+cat("Training set:", nrow(train_data), "rows\n")
+cat("Test set:", nrow(test_data), "rows\n")
+```
+
+## Baseline Linear Regression Model
+
+```{r}
+# Fit baseline linear regression on raw salary_in_usd
+baseline_lm <- lm(
+  salary_in_usd ~ experience_ord + company_size_num +
+    is_remote + work_year + company_region + same_country,
+  data = train_data
+)
+
+summary(baseline_lm)
+```
+
+```{r}
+# Get predictions on training data
+train_data$predicted <- predict(baseline_lm, newdata = train_data)
+
+# Plot 1: Actual vs Predicted line graph (sorted by actual salary)
+plot_df <- train_data %>%
+  arrange(salary_in_usd) %>%
+  mutate(index = row_number())
+
+p1 <- ggplot(plot_df, aes(x = index)) +
+  geom_line(aes(y = salary_in_usd, color = "Actual"), alpha = 0.6) +
+  geom_line(aes(y = predicted, color = "Predicted"), alpha = 0.8) +
+  scale_y_continuous(labels = dollar_format()) +
+  scale_color_manual(values = c("Actual" = "#3498db", "Predicted" = "#e74c3c")) +
+  labs(title = "Baseline Linear Regression: Actual vs Predicted Salary",
+       x = "Observations (sorted by actual salary)",
+       y = "Salary in USD", color = "") +
+  theme_minimal()
+
+# Plot 2: Predicted salary trend across years
+yearly_pred <- train_data %>%
+  group_by(work_year) %>%
+  summarise(
+    Mean_Actual = mean(salary_in_usd),
+    Mean_Predicted = mean(predicted)
+  )
+
+p2 <- ggplot(yearly_pred, aes(x = work_year)) +
+  geom_line(aes(y = Mean_Actual, color = "Actual"), linewidth = 1.2) +
+  geom_point(aes(y = Mean_Actual, color = "Actual"), size = 3) +
+  geom_line(aes(y = Mean_Predicted, color = "Predicted"),
+            linewidth = 1.2, linetype = "dashed") +
+  geom_point(aes(y = Mean_Predicted, color = "Predicted"), size = 3) +
+  scale_y_continuous(labels = dollar_format()) +
+  scale_color_manual(values = c("Actual" = "#3498db", "Predicted" = "#e74c3c")) +
+  labs(title = "Mean Salary per Year: Actual vs Predicted",
+       x = "Year", y = "Salary in USD", color = "") +
+  theme_minimal()
+
+grid.arrange(p1, p2, nrow = 2)
+
+# Clean up temporary column
+train_data$predicted <- NULL
+```
+
+**Plot 1 (top):** Shows every observation sorted by actual salary: the blue line is the real salary and the red line is what the model predicted. The closer the two lines overlap, the better the model fits. Large gaps reveal where the model struggles, typically at very high salaries.
+
+**Plot 2 (bottom):** Compares the average actual vs predicted salary per year. If the red line closely follows the blue line, the model is capturing the yearly salary trend well.
+
+## Assumption Checking
+
+### Linearity & Homoscedasticity
+
+```{r}
+
+# QQ plot of residuals from baseline linear regression
+
+qqnorm(residuals(baseline_lm), main = "Q-Q Plot of Residuals")
+
+qqline(residuals(baseline_lm), col = "red", lwd = 2)
+
+```
+
+```         
+Interpretation: This plots the residuals against the theoretical normal distribution. If the points closely follow the red diagonal line, the residuals are approximately normally distributed. Deviations at the tails where points curve away from the line indicate skewness, suggesting the normality assumption isn't fully met and a log transformation of salary may be needed.
+```
+
+### Multicollinearity (VIF)
+
+```{r}
+vif_values <- vif(baseline_lm)
+
+# Extract raw GVIF values no adjustment
+vif_df <- data.frame(
+  Feature = rownames(vif_values),
+  VIF = round(vif_values[, "GVIF"], 2)
+)
+
+# Table
+vif_df %>%
+  arrange(desc(VIF)) %>%
+  kable(caption = "VIF Values (> 5 indicates multicollinearity concern)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+
+cat("Features with VIF > 5:", sum(vif_df$VIF > 5), "\n")
+
+# Bar plot
+ggplot(vif_df, aes(x = reorder(Feature, VIF), y = VIF)) +
+  geom_bar(stat = "identity", fill = "#3498db", alpha = 0.8) +
+  geom_hline(yintercept = 5, linetype = "dashed", color = "red") +
+  coord_flip() +
+  labs(title = "VIF by Feature", x = "Feature", y = "VIF") +
+  theme_minimal()
+```
+
+This uses the raw GVIF column directly with the standard rule: anything above 5 the red dashed line signals multicollinearity concern.
+
+## Log-Transformed Regression Model
+
+```{r}
+# Fit model on log-transformed salary to address skewness and heteroscedasticity
+
+# Log-transformed linear regression model
+log_lm <- lm(
+  log_salary ~ experience_ord + company_size_num +
+    is_remote + work_year + exp_x_compsize +
+    company_region + same_country,
+  data = train_data
+)
+
+# Model summary
+summary(log_lm)
+
+# Diagnostic plots (one at a time for clarity)
+par(mfrow = c(2, 2))
+
+# 1. Residuals vs Fitted: checks linearity (points should scatter randomly)
+plot(log_lm, which = 1, main = "Linearity:Residuals vs Fitted")
+
+# 2. QQ Plot: checks normality (points should follow the red line)
+plot(log_lm, which = 2, main = "Normal Q-Q Plot")
+
+# 3. Scale-Location: checks equal variance (line should be roughly flat)
+plot(log_lm, which = 3, main = "Homoscedasticity")
+
+# 4. Cook's Distance: identifies influential outliers (watch for points > 0.5)
+plot(log_lm, which = 4, main = "Cook's Distance")
+
+par(mfrow = c(1, 1))
+```
+
+-   **Residuals vs Fitted (top-left):** The residuals are scattered fairly randomly around zero with no strong funnel or curve pattern, which is a good sign(it suggests the linearity).
+
+-   **Normal Q-Q Plot (top-right):** The middle portion of the points follows the diagonal line well, meaning most residuals are approximately normal.Overall, the log transformation has improved normality compared to the raw salary model, but it's not perfect.
+
+-   **Homoscedasticity** **(bottom-left):** The red line is roughly flat across the range of fitted values, suggesting that variance is fairly constant homoscedasticity holds reasonably well.
+
+-   **Cook's Distance** **(bottom-right)**: All Cook's distance values are well below 0.5 the highest is around 0.015), meaning no single observation is disproportionately influencing the model.
+
+## Model Evaluation
+
+```{r regression-evaluation}
+# 
+# Predictions – baseline model
+pred_baseline <- predict(baseline_lm, newdata = test_data)
+
+# Predictions – log model (back-transform with bias correction)
+pred_log <- predict(log_lm, newdata = test_data)
+sigma_log <- summary(log_lm)$sigma
+pred_log_bt <- exp(pred_log) * exp(sigma_log^2 / 2)
+
+# Evaluation metrics function
+eval_metrics <- function(actual, predicted, model_name) {
+  data.frame(
+    Model = model_name,
+    RMSE = round(sqrt(mean((actual - predicted)^2)), 0),
+    MAE = round(mean(abs(actual - predicted)), 0),
+    R2 = round(1 - sum((actual - predicted)^2) / sum((actual - mean(actual))^2), 4)
+  )
+}
+
+results_baseline <- eval_metrics(
+  test_data$salary_in_usd, pred_baseline,
+  "Baseline Linear Regression"
+)
+results_log <- eval_metrics(
+  test_data$salary_in_usd, pred_log_bt,
+  "Log-Transformed Linear Regression"
+)
+
+reg_results <- bind_rows(results_baseline, results_log)
+
+# Display the results
+reg_results %>%
+  kable(caption = "Regression Model Comparison",
+        format.args = list(big.mark = ",")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+This table compares the baseline and log-transformed models using RMSE, MAE, and R². The model with lower RMSE/MAE and higher R² fits the data better, and the base line model out performs the the log transfomed model.
+
+## Advanced Model: Random Forest Regression
