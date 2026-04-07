@@ -1,20 +1,22 @@
 ---
-title: "Loan Data Analysis — A Comprehensive Predictive Modeling Study"
+title: "Loan Data Analysis:A Comprehensive Predictive Modeling Study"
 author: "Data Science & Linear Models Project"
 date: "`r Sys.Date()`"
 output:
   html_document:
     toc: true
-    toc_depth: 3
     toc_float: true
-    number_sections: true
+    toc_depth: 3
     theme: flatly
     highlight: tango
     code_folding: show
-    df_print: paged
+    fig_width: 9
+    fig_height: 5
   pdf_document:
     toc: true
-    number_sections: true
+    toc_depth: 3
+    fig_width: 7
+    fig_height: 4
 ---
 
 ```{r setup, include=FALSE}
@@ -35,7 +37,7 @@ knitr::opts_chunk$set(
 This study uses a loan applicant dataset to demonstrate **predictive modeling** across two major tasks:
 
 | Task | Goal | Target Variable |
-|----|----|----|
+|------------------------|------------------------|------------------------|
 | **Regression** | Predict applicant income | `person_income` |
 | **Classification** | Predict loan default | `loan_status` (0 = Default, 1 = Repaid) |
 
@@ -84,10 +86,12 @@ head(df)
 # Data Understanding
 
 ## Structure & Summary Statistics
+```{r}
+as.data.frame(unclass(summary(df)))
+```
 
 ```{r structure}
 str(df)
-summary(df)
 ```
 
 **Key observations from the summary:**
@@ -129,11 +133,7 @@ numeric_vars <- c("person_age", "person_income", "person_emp_exp", "loan_amnt",
 hist_plots <- lapply(numeric_vars, function(var) {
   ggplot(df, aes(x = .data[[var]])) +
     geom_histogram(bins = 40, fill = "steelblue", color = "white", alpha = 0.8) +
-    labs(title = var, x = NULL, y = "Count") +
-    scale_x_continuous(labels = scales::comma) +
-    scale_y_continuous(labels = scales::comma, expand = expansion(mult = c(0, 0.15))) +
-    theme(plot.title = element_text(size = 14, face = "bold"),
-          axis.text.x = element_text(size = 10, angle = 45, hjust = 1))
+    labs(title = var, x = NULL, y = "Count") 
 })
 
 do.call(grid.arrange, c(hist_plots, ncol = 2))
@@ -143,10 +143,7 @@ do.call(grid.arrange, c(hist_plots, ncol = 2))
 box_plots <- lapply(numeric_vars, function(var) {
   ggplot(df, aes(y = .data[[var]])) +
     geom_boxplot(fill = "steelblue", alpha = 0.6, outlier.color = "red", outlier.size = 1) +
-    labs(title = var, y = NULL) +
-    scale_y_continuous(labels = scales::comma) +
-    theme(plot.title = element_text(size = 11, face = "bold"),
-          axis.text.x = element_blank(), axis.ticks.x = element_blank())
+    labs(title = var, y = NULL) 
 })
 
 do.call(grid.arrange, c(box_plots, ncol = 4))
@@ -158,18 +155,7 @@ do.call(grid.arrange, c(box_plots, ncol = 4))
 -   `person_income` is heavily right-skewed a **log transformation** will be essential.
 -   `person_emp_exp` contains implausible values (e.g., 125 years).
 
-### Skewness and Kurtosis
 
-```{r skewness-table}
-skew_table <- data.frame(
-  Variable = numeric_vars,
-  Skewness = sapply(numeric_vars, function(v) round(skewness(df[[v]], na.rm = TRUE), 3)),
-  Kurtosis = sapply(numeric_vars, function(v) round(kurtosis(df[[v]], na.rm = TRUE), 3))
-)
-print(skew_table)
-```
-
-> **Rule of thumb,**Skewness beyond ±1 shows the need for transformation in linear modeling.
 
 ## Univariate Analysis:Categorical Variables
 
@@ -189,7 +175,7 @@ cat_plots <- lapply(cat_vars, function(var) {
 do.call(grid.arrange, c(cat_plots, ncol = 3))
 ```
 
-## Target Variable Distribution
+## Loan Status Variable Distribution
 
 ```{r target-distribution, fig.width=8, fig.height=6}
 ggplot(df, aes(x = factor(loan_status), fill = factor(loan_status))) +
@@ -212,7 +198,7 @@ ggplot(df, aes(x = factor(loan_status), fill = factor(loan_status))) +
 
 > **Important:** The 78/22 class imbalance means **accuracy alone is misleading**. We will also rely on **AUC-ROC** for classification evaluation.
 
-## Bivariate Analysis Credit Risk Exploration
+## Bivariate Analysis: Credit Risk Exploration
 
 ### Income vs Credit Score by Loan Status
 
@@ -286,13 +272,6 @@ ggcorrplot(cor_matrix, method = "square", type = "lower",
            ggtheme = theme_classic())
 ```
 
-```{r corrplot-alt, fig.width=8, fig.height=8}
-corrplot(cor_matrix, method = "color", type = "upper",
-         addCoef.col = "black", number.cex = 0.7,
-         tl.col = "black", tl.srt = 45,
-         title = "Correlation Plot", mar = c(0, 0, 2, 0))
-```
-
 **Correlation Insights:**
 
 -   `loan_percent_income` has the strongest positive correlation with `loan_status` the most influential default predictor.
@@ -353,8 +332,8 @@ Education is set as an **ordered** factor (High School \< Associate \< Bachelor 
 We created **domain-informed features** that capture relationships the raw variables miss.
 
 | New Feature | Logic | Rationale |
-|----|----|----|
-| `loan_credit_ratio` | loan_amnt and credit_score | Loan burden relative to creditworthiness |
+|------------------------|------------------------|------------------------|
+| `loan_credit_ratio` | loan_amnt and credit_score | Loan burden relative to credit worthiness |
 | `age_exp_ratio` | emp_exp and age | Career progression proxy |
 | `income_per_exp` | income and emp_exp | Earning efficiency |
 | `credit_hist_per_age` | cred_hist_length and age | Financial maturity |
@@ -412,10 +391,16 @@ grid.arrange(p1, p2, p3, p4, ncol = 2)
 
 -   Defaulters exhibit a **higher loan-to-credit ratio** : they borrow more relative to their creditworthiness.
 -   The **high-risk flag** sharply separates default rates: flagged applicants default far more often.
--   **Young adults** show the highest default proportion **seniors** the lowest.
--   **Low-income brackets** default more frequently than high-income brackets.
+-   **Adults and Middle aged individuals** show the highest default proportion **seniors** the lowest.
+-   **High-income brackets** default more frequently than low-income brackets.
 
 ------------------------------------------------------------------------
+```{r}
+corr_matrix <- cor(dplyr::select(df, where(is.numeric)))
+
+corr_df <- as.data.frame(round(corr_matrix, 3))
+corr_df
+```
 
 # Part A.Regression: Predicting Income {.tabset}
 
@@ -426,10 +411,7 @@ We train three regression models on `person_income` using demographic and engine
 ## Prepare Regression Data
 
 ```{r regression-data-prep}
-reg_df <- df %>%
-  select(person_income, person_age, person_gender, person_education,
-         person_emp_exp, person_home_ownership,
-         age_exp_ratio, credit_hist_per_age) %>%
+reg_df <- dplyr::select(df, -person_emp_exp, -loan_percent_income, -person_age, -income_per_exp, -loan_credit_ratio, -cb_person_cred_hist_length, -high_risk, -age_group, -income_bracket, -loan_status) %>%
   drop_na()
 
 reg_df$person_education <- factor(reg_df$person_education, ordered = FALSE)
@@ -482,12 +464,15 @@ cat("Training set:", nrow(train_reg), "rows | Test set:", nrow(test_reg), "rows\
 ## Model 1. Linear Regression (OLS)
 
 ### Full Model
+```{r}
+lm_main <- lm(log_income ~ loan_amnt + person_home_ownership + 
+    loan_intent + loan_int_rate + 
+    person_education + person_gender, data = train_reg)
+summary(lm_main)
+```
 
 ```{r linear-regression-full}
-lm_full <- lm(log_income ~ person_age + person_gender + person_education +
-                 person_emp_exp + person_home_ownership +
-                 age_exp_ratio + credit_hist_per_age,
-               data = train_reg)
+lm_full <- lm(log_income ~ .-person_income ,data = train_reg)
 
 summary(lm_full)
 ```
@@ -574,8 +559,7 @@ autoplot(lm_step, which = 1:6, ncol = 3) + theme_classic()
 ### Comparing Transformations: Log vs Sqrt
 
 ```{r compare-transformations}
-lm_sqrt <- lm(sqrt(person_income) ~ person_age + person_gender + person_education +
-                person_emp_exp + person_home_ownership,
+lm_sqrt <- lm(sqrt(person_income) ~ .-log_income,
               data = train_reg)
 
 cat("Log Transform Adj R²:", round(summary(lm_step)$adj.r.squared, 4), "\n")
@@ -612,9 +596,7 @@ par(mfrow = c(1, 1))
 ## Model 2.Decision Tree Regressor
 
 ```{r decision-tree-reg}
-dt_model <- rpart(person_income ~ person_age + person_gender + person_education +
-                    person_emp_exp + person_home_ownership +
-                    age_exp_ratio + credit_hist_per_age,
+dt_model <- rpart(log_income ~.-person_income,
                   data = train_reg, method = "anova",
                   control = rpart.control(cp = 0.001, maxdepth = 10, minsplit = 20))
 
@@ -625,10 +607,7 @@ printcp(dt_model)
 
 ```{r random-forest-reg}
 set.seed(42)
-rf_model <- randomForest(person_income ~ person_age + person_gender +
-                           person_education + person_emp_exp +
-                           person_home_ownership + age_exp_ratio +
-                           credit_hist_per_age,
+rf_model <- randomForest(log_income ~ .-person_income,
                          data = train_reg, 
                          ntree = 150,
                          mtry = 3, 
@@ -700,7 +679,7 @@ Across all three metrics, **Linear Regression (log)** is the clear winner it has
 ```{r best-model-table}
 best_model_table <- data.frame(
   Metric = c("Model", "RMSE", "MAE", "R²", "MAPE (%)"),
-  Value  = c("Linear Regression (log)", "40,420", "28,150", "0.1487", "42.30")
+  Value  = c("Linear Regression (log)", "37,645", "25,698", "0.2509", "36.78")
 )
 
 knitr::kable(best_model_table,
@@ -708,7 +687,7 @@ knitr::kable(best_model_table,
              align = c("l", "r"))
 ```
 
-**Decision Tree** as the best model because it had the highest R squated (0.1491), narrowly beating Linear Regression and Random Forest. It explains about **14.9% of the variance** in income, with predictions off by \$29,000 on average (MAE) and a typical error of \$40,120 (RMSE).
+**Linear Regression(Log)** as the best model because it had the highest R squared (0.2509).
 
 ------------------------------------------------------------------------
 
@@ -767,26 +746,7 @@ print(cm_log)
 
 **Sensitivity (Recall): 0.7454**:Of all the people who *actually* repaid their loans, the model correctly identified **74.5%** of them. The remaining 25.5% (the 508 false negatives) were wrongly flagged as defaulters.
 
-## Model 2.Random Forest Classifier
-
-```{r random-forest-clf}
-set.seed(42)
-rf_clf <- randomForest(loan_status ~ ., data = train_clf,
-                       ntree = 500, mtry = 4, importance = TRUE)
-
-pred_rf_clf <- predict(rf_clf, newdata = test_clf)
-prob_rf_clf <- predict(rf_clf, newdata = test_clf, type = "prob")[, 2]
-
-cat("\n Random Forest \n")
-cm_rf <- confusionMatrix(pred_rf_clf, test_clf$loan_status, positive = "1")
-print(cm_rf)
-```
-
-Out of 8,952 test observations, the Random Forest got **8,295 correct** and only **657 wrong** — the fewest errors of any model so far.\
-\
-**Sensitivity (Recall): 0.7679** — The Random Forest correctly identifies **76.8%** of actual repayers.\
-
-## Model 3.Decision Tree Classifier
+## Model 2.Decision Tree Classifier
 
 ```{r decision-tree-clf}
 dt_clf <- rpart(loan_status ~ ., data = train_clf, method = "class",
@@ -807,6 +767,28 @@ Accuracy: 0.9199 (91.99%):A clear improvement over Logistic Regression's 89.58%
 P-Value [Acc \> NIR]: \< 2.2e-16:Statistically significantly better than guessing the majority class.
 
 Sensitivity (Recall): 0.7419 Of all the people who actually repaid, the model correctly identified 74.2% of them.
+
+
+## Model 3.Random Forest Classifier
+
+```{r random-forest-clf}
+set.seed(42)
+rf_clf <- randomForest(loan_status ~ ., data = train_clf,
+                       ntree = 500, mtry = 4, importance = TRUE)
+
+pred_rf_clf <- predict(rf_clf, newdata = test_clf)
+prob_rf_clf <- predict(rf_clf, newdata = test_clf, type = "prob")[, 2]
+
+cat("\n Random Forest \n")
+cm_rf <- confusionMatrix(pred_rf_clf, test_clf$loan_status, positive = "1")
+print(cm_rf)
+```
+
+Out of 8,952 test observations, the Random Forest got **8,295 correct** and only **657 wrong** — the fewest errors of any model so far.\
+\
+**Sensitivity (Recall): 0.7679** — The Random Forest correctly identifies **76.8%** of actual repayers.\
+
+
 
 ### ROC Curves & AUC Comparison
 
@@ -885,19 +867,6 @@ cat("  F1 Score:", clf_comparison$F1_Score[best_clf_idx], "\n")
 
 This section synthesizes findings on how **income**, **credit score** and **prior defaults** interact to drive loan outcomes.
 
-```{r credit-risk-summary}
-cat("══════════════════════════════════════════════\n")
-cat("           CREDIT RISK INSIGHTS\n")
-cat("══════════════════════════════════════════════\n")
-cat("1. Higher credit scores → lower default rates.\n")
-cat("2. loan_percent_income is the strongest predictor of default.\n")
-cat("3. Previous loan defaults strongly predict future defaults.\n")
-cat("4. High-risk applicants (high loan %, low credit) default\n")
-cat("   at substantially higher rates.\n")
-cat("5. Income alone is a weak predictor; its ratio to loan\n")
-cat("   amount matters far more.\n")
-
-```
 
 ```{r credit-risk-viz, fig.width=14, fig.height=6}
 p_cr1 <- ggplot(df, aes(x = credit_score, fill = loan_status)) +
@@ -935,8 +904,8 @@ So having a previous default on file is essentially a **perfect predictor of fut
 ```{r final-regression-summary}
 
 cat("Best Regression Model : Linear Regression (log)\n")
-cat("Test R²              : 0.1487\n")
-cat("Test RMSE            : 40,420\n\n")
+cat("Test R²              : 0.2509\n")
+cat("Test RMSE            : 37,645\n\n")
 
 cat("Key regression findings:\n")
 cat(" - Log transformation of income was necessary to meet normality assumptions.\n")
