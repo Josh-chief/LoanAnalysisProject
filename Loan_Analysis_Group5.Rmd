@@ -402,7 +402,7 @@ corr_df <- as.data.frame(round(corr_matrix, 3))
 corr_df
 ```
 
-# Part A.Regression: Predicting Income {.tabset}
+# Part A.Regression: Predicting Income
 
 ## Objective
 
@@ -464,14 +464,14 @@ cat("Training set:", nrow(train_reg), "rows | Test set:", nrow(test_reg), "rows\
 ## Model 1. Linear Regression (OLS)
 
 ### Full Model
-```{r}
+```{r Linear regression without feature eng variables}
 lm_main <- lm(log_income ~ loan_amnt + person_home_ownership + 
     loan_intent + loan_int_rate + 
     person_education + person_gender, data = train_reg)
 summary(lm_main)
 ```
 
-```{r linear-regression-full}
+```{r linear-regression-full with feature eng variables}
 lm_full <- lm(log_income ~ .-person_income ,data = train_reg)
 
 summary(lm_full)
@@ -691,7 +691,7 @@ knitr::kable(best_model_table,
 
 ------------------------------------------------------------------------
 
-# Part B.Classification: Loan Default Prediction {.tabset}
+# Part B.Classification: Loan Default Prediction
 
 ## Objective
 
@@ -942,7 +942,7 @@ cat(" - High-risk applicants (high loan %, low credit) default at much higher ra
 
 ------------------------------------------------------------------------
 
-# Limitations & Future Work
+# Limitations and Future Work
 
 **Limitations:**
 
