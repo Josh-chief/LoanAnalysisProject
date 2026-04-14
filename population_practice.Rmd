@@ -1,0 +1,208 @@
+---
+title: "Population_Practice"
+author: "Joshua_Ngumi"
+date: "2026-04-14"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    theme: flatly
+    highlight: tango
+    code_folding: show
+    fig_width: 9
+    fig_height: 5
+  pdf_document:
+    toc: true
+    toc_depth: 3
+    fig_width: 7
+    fig_height: 
+runtime: shiny
+---
+
+## Environment Setup
+
+```{r load-libraries}
+libs <- c("dplyr","tidyr","readr","purrr", "fst", "finalfit", "shiny", "ggplot2", "DT")
+
+for (lib in libs) {
+  if (!(lib %in% installed.packages())) install.packages(lib, quietly = TRUE)
+  library(lib, character.only = TRUE)
+}
+
+select <- dplyr::select
+mutate <- dplyr::mutate
+filter <- dplyr::filter
+summarise <- dplyr::summarise
+
+
+theme_set(theme_classic())
+```
+
+## Load the Data
+First convert to dot fst for faster loading
+```{r load data}
+csv_path <- "C:/Users/Light House/Desktop/MastersDSA/semThree-DSA/Linear Models/Data_Project/population_master_practise.csv"
+
+fst_path <- "population_master_practise.fst"
+
+# Convert first
+if (!(file.exists(fst_path))) {
+  population_df <- read.csv(csv_path)
+  
+  write_fst(population_df, fst_path)
+}
+
+# load
+population_df <- read_fst(fst_path)
+
+head(population_df)
+
+```
+
+## Initial clean up
+
+```{r validate-data-types}
+str(population_df)
+
+```
+## 4. Describe & model with **finalfit**
+
+We'll predict **life expectancy** from a handful of demographic indicators.
+
+
+```{r finalfit-table}
+
+explanatory <- c("crude_birth_rate", "crude_death_rate",
+                 "total_fertility_rate", "growth_rate",
+                 "infant_mortality")
+dependent   <- "life_expectancy"
+
+# Summary table (finalfit)
+population_df |>
+  summary_factorlist(dependent, explanatory,
+                     cont = "mean", p = FALSE, add_dependent_label = TRUE)
+
+```
+
+```{r finalfit-model}
+# Linear regression via finalfit
+ff_fit <- population_df |> finalfit(dependent, explanatory, metrics = TRUE)
+ff_fit[[1]]   # coefficient table
+ff_fit[[2]]   # model metrics (R², AIC, etc.)
+
+# Keep the underlying lm for the Shiny predictor below
+lm_fit <- lm(reformulate(explanatory, dependent), data = population_df)
+
+## Interactive prediction UI (Shiny)
+
+
+```
+
+## Interactive prediction UI (Shiny)
+
+```{r shiny-app, echo=FALSE}
+library(shiny)
+library(ggplot2)
+library(tidyr)
+
+# Make sure the objects from earlier chunks are clean
+population_df <- drop_na(population_df)
+
+rng <- function(x) {
+  r <- range(x, na.rm = TRUE)
+  if (any(!is.finite(r))) stop("Column is empty or all-NA")
+  round(r, 2)
+}
+med <- function(x) median(x, na.rm = TRUE)
+
+shinyApp(
+  ui = fluidPage(
+    titlePanel("Predict Life Expectancy"),
+    sidebarLayout(
+      sidebarPanel(
+        sliderInput("cbr", "Crude birth rate",
+                    min = rng(population_df$crude_birth_rate)[1],
+                    max = rng(population_df$crude_birth_rate)[2],
+                    value = med(population_df$crude_birth_rate), step = 0.1),
+        sliderInput("cdr", "Crude death rate",
+                    min = rng(population_df$crude_death_rate)[1],
+                    max = rng(population_df$crude_death_rate)[2],
+                    value = med(population_df$crude_death_rate), step = 0.1),
+        sliderInput("tfr", "Total fertility rate",
+                    min = rng(population_df$total_fertility_rate)[1],
+                    max = rng(population_df$total_fertility_rate)[2],
+                    value = med(population_df$total_fertility_rate), step = 0.05),
+        sliderInput("gr", "Growth rate",
+                    min = rng(population_df$growth_rate)[1],
+                    max = rng(population_df$growth_rate)[2],
+                    value = med(population_df$growth_rate), step = 0.05),
+        sliderInput("imr", "Infant mortality",
+                    min = rng(population_df$infant_mortality)[1],
+                    max = rng(population_df$infant_mortality)[2],
+                    value = med(population_df$infant_mortality), step = 0.5)
+      ),
+      mainPanel(
+        h3("Predicted life expectancy"),
+        verbatimTextOutput("pred"),
+        plotOutput("plot", height = "320px")
+      )
+    )
+  ),
+
+  server = function(input, output, session) {
+    pred <- reactive({
+      newdat <- data.frame(
+        crude_birth_rate     = input$cbr,
+        crude_death_rate     = input$cdr,
+        total_fertility_rate = input$tfr,
+        growth_rate          = input$gr,
+        infant_mortality     = input$imr
+      )
+      predict(lm_fit, newdata = newdat, interval = "prediction")
+    })
+
+    output$pred <- renderPrint({
+      p <- pred()
+      cat(sprintf("Point estimate : %.2f years\n", p[1, "fit"]))
+      cat(sprintf("95%% PI        : [%.2f , %.2f]\n", p[1, "lwr"], p[1, "upr"]))
+    })
+
+    output$plot <- renderPlot({
+      ggplot(population_df, aes(infant_mortality, life_expectancy)) +
+        geom_point(alpha = 0.15) +
+        geom_vline(xintercept = input$imr, colour = "steelblue", linewidth = 1) +
+        geom_hline(yintercept = pred()[1, "fit"], colour = "tomato", linewidth = 1) +
+        labs(x = "Infant mortality", y = "Life expectancy",
+             title = "Your prediction in context") +
+        theme_minimal()
+    })
+  },
+  options = list(height = 560)
+)
+```
+
+Two things that were also wrong in your last paste: `rng` was redefined (overwriting the guarded version) and the plot used `model_df` instead of `population_df`. Both are corrected above.
+
+After saving, hit **Run Document**. The sliders should render with real numbers now.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
