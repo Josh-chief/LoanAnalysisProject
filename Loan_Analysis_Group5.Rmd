@@ -771,17 +771,25 @@ Sensitivity (Recall): 0.7419 Of all the people who actually repaid, the model co
 
 ## Model 3.Random Forest Classifier
 
-```{r random-forest-clf}
-set.seed(42)
-rf_clf <- randomForest(loan_status ~ ., data = train_clf,
-                       ntree = 500, mtry = 4, importance = TRUE)
+```{r}
+imp <- importance(rf_clf)
 
-pred_rf_clf <- predict(rf_clf, newdata = test_clf)
-prob_rf_clf <- predict(rf_clf, newdata = test_clf, type = "prob")[, 2]
+# Convert to dataframe
+imp_df <- data.frame(
+  Feature = rownames(imp),
+  Importance = imp[, 1] 
+)
 
-cat("\n Random Forest \n")
-cm_rf <- confusionMatrix(pred_rf_clf, test_clf$loan_status, positive = "1")
-print(cm_rf)
+# Sort
+imp_df <- imp_df[order(imp_df$Importance, decreasing = TRUE), ]
+
+ggplot(imp_df, aes(x = reorder(Feature, Importance), y = Importance)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Feature Importance (Random Forest)",
+       x = "Features",
+       y = "Importance") +
+  theme_minimal()
 ```
 
 Out of 8,952 test observations, the Random Forest got **8,295 correct** and only **657 wrong** — the fewest errors of any model so far.\
