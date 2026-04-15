@@ -1,0 +1,79 @@
+---
+title: '136346'
+author: '136346'
+date: "2026-04-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##  CAT Questions 
+- How can a combination of time series analysis, econometric models, demographic data, industry trends and machine learning improve labour market forecasting?
+  
+  -Time series analysis deals with data sets over a give time it can be in years,months or even daily occurrences while econometric models are the models that study time series data set such as ARIMA.Demographic dataset it help us understand different population and what they do in terms of social activities eg level of employment, while industrial trends on the other hand are trends that show at what level are industries being opened in a certain region and what industries are common.Machine learning is the process learning is the process of using huge amount of data in to come with models which solve a certain problem in a community or even an organization.
+  -when all these variables are combined they can improve the labour marketing in a great manner that is a machine learning model can be used to predict the level of unemployment rates in the coming using this variables it can also be used to describe the level at which certain people from different demographic areas get into employment compared to people from other demographic areas.Machine learning models can also be used forecast why industrial trends improved on a certain region was it because of increased labour market or not. 
+ 
+- How can standardizing sector classifications and harmonizing survey methodologies improve the comparability of employment data across multiple countries?
+
+  -Standardizing sector classification and harmonizing survey methodologies helps in comparability of unemployment across multiple countries because different countries might have higher or lower employment rates and this is sorted using this process where they are given a standardized by giving them a maximum cap and a minimum cap making it to be on the same level that they can be compared with each other.
+  
+
+- Use the input data for Colombia on the municipality level (“colombia_input.fst”) and create a plot that visualizes the relationship between population density (“raster_pop_100”) and - - light intensity recorded at night (“night_lights_100”). Interpret your graph.
+
+Train a suitable (ML) model to predict population density and visualize the population density in Quindío. Explain the graph. 
+
+## SET the environment 
+```{r set the environment}
+# Load required/necessary libraries
+
+library(fst)
+library(ggplot2)
+library(dplyr)
+library(corrplot)
+library(knitr)
+library(pander)
+library(ranger)
+library(caret)
+library(gridExtra)
+library(rpart)
+library(randomForest)
+
+```
+
+## Load the dataset
+```{r load the dataset}
+
+  # Importing the data files (colombia_input and quindio_input_grid data files)
+
+colombia_input <- read_fst("C:/Users/Light House/Desktop/MastersDSA/semThree-DSA/Linear Models/Data_Project/colombia_input.fst")
+
+quindio_input_grid <- read_fst("C:/Users/Light House/Desktop/MastersDSA/semThree-DSA/Linear Models/Data_Project/quindio_input_grid.fst")
+
+
+
+```
+
+```{r}
+# creating the plot using the ggplot2
+
+ggplot(colombia_input, aes(night_lights_100, raster_pop_100))+
+  geom_point()+
+  xlab("Light intensity recorded at night") + ylab("Population density") +
+  ggtitle("Scatterplot of population density versus light intensity recorded at night")
+
+```
+The above scatterplot shows a positive linear relationship between the population density and the light intensity recorded at night. This means that an increase in light intensity recorded at night is expected to result in an increase in the population density. It is important to note that few outliers can be spotted from the plot.
+
+## Solution to Exercise 2
+
+Training a suitable (ML) model to predict population density
+
+
+Exploring the data
+
+```{r}
+
+```
+

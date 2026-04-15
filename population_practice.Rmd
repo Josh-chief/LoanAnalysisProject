@@ -23,7 +23,7 @@ runtime: shiny
 ## Environment Setup
 
 ```{r load-libraries}
-libs <- c("dplyr","tidyr","readr","purrr", "fst", "finalfit", "shiny", "ggplot2", "DT")
+libs <- c("dplyr","tidyr","readr","purrr", "fst", "finalfit", "shiny", "ggplot2", "DT","lmtest", "car", "MASS", "broom","lmtest", "car", "MASS")
 
 for (lib in libs) {
   if (!(lib %in% installed.packages())) install.packages(lib, quietly = TRUE)
@@ -40,7 +40,8 @@ theme_set(theme_classic())
 ```
 
 ## Load the Data
-First convert to dot fst for faster loading
+#### First convert to dot fst for faster loading
+
 ```{r load data}
 csv_path <- "C:/Users/Light House/Desktop/MastersDSA/semThree-DSA/Linear Models/Data_Project/population_master_practise.csv"
 
@@ -63,10 +64,10 @@ head(population_df)
 ## Initial clean up
 
 ```{r validate-data-types}
-str(population_df)
+glimpse(population_df)
 
 ```
-## 4. Describe & model with **finalfit**
+## Describe & model with **finalfit**
 
 We'll predict **life expectancy** from a handful of demographic indicators.
 
@@ -78,12 +79,15 @@ explanatory <- c("crude_birth_rate", "crude_death_rate",
                  "infant_mortality")
 dependent   <- "life_expectancy"
 
+
 # Summary table (finalfit)
 population_df |>
   summary_factorlist(dependent, explanatory,
-                     cont = "mean", p = FALSE, add_dependent_label = TRUE)
+                     cont = "mean", p = TRUE, add_dependent_label = TRUE)
 
 ```
+
+
 
 ```{r finalfit-model}
 # Linear regression via finalfit
@@ -94,10 +98,12 @@ ff_fit[[2]]   # model metrics (R², AIC, etc.)
 # Keep the underlying lm for the Shiny predictor below
 lm_fit <- lm(reformulate(explanatory, dependent), data = population_df)
 
-## Interactive prediction UI (Shiny)
 
 
 ```
+
+
+
 
 ## Interactive prediction UI (Shiny)
 
